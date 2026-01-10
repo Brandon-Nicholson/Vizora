@@ -1,12 +1,17 @@
+"""
+Dataset Profiler - Builds a compact JSON profile for the orchestrator agent.
+
+Design principles:
+1. MINIMAL - Only include what the agent needs to make planning decisions
+2. STRUCTURED - Consistent format that's easy to reference
+3. ACTIONABLE - Focus on signals that inform which steps to take
+"""
+
 import pandas as pd
 import re
-from typing import Optional
+from typing import Optional, Literal
 from rapidfuzz import process, fuzz
 from sklearn.feature_selection import mutual_info_classif
-
-PATH = "tests/data/Heart_Disease_Prediction.csv"
-
-df = pd.read_csv(PATH)
 
 # normalize column names for fuzzy matching
 def _norm(s: str) -> str:
@@ -56,289 +61,257 @@ def resolve_target_column(df_columns, user_target, threshold=85):
         f"Top candidates: {suggestions}"
     )
 
-# infer the task hint (classification or regression) based on the number of rows and the number of unique target values
-def infer_task_hint(n_rows: int, n_unique_target: int, has_target: bool) -> str:
-    if not has_target:
-        return None
+# ============================================================================
+# SEMANTIC TYPE INFERENCE
+# ============================================================================
 
-    unique_ratio = n_unique_target / max(n_rows, 1)
+def _infer_semantic_type(series: pd.Series, n_rows: int) -> Literal["numeric", "categorical", "binary", "text"]:
+    """Classify a column into one of 4 semantic types for planning purposes."""
+    if pd.api.types.is_bool_dtype(series):
+        return "binary"
 
-    if n_unique_target <= 20 and unique_ratio <= 0.2:
-        return "classification"
+    if pd.api.types.is_numeric_dtype(series):
+        n_unique = series.nunique(dropna=True)
+        if n_unique == 2:
+            return "binary"
+        if n_unique <= 15 or (n_unique / max(n_rows, 1)) < 0.05:
+            return "categorical"
+        return "numeric"
 
+    # Object dtype - check if it's low-cardinality categorical or free text
+    n_unique = series.nunique(dropna=True)
+    if n_unique <= 50 or (n_unique / max(n_rows, 1)) < 0.1:
+        return "categorical"
+    return "text"
+
+
+def _infer_task_type(target_series: pd.Series, n_rows: int) -> Literal["binary_classification", "multiclass_classification", "regression"]:
+    """Infer the ML task type from the target column."""
+    n_unique = target_series.nunique(dropna=True)
+
+    if n_unique == 2:
+        return "binary_classification"
+    if n_unique <= 20 or (n_unique / max(n_rows, 1)) < 0.05:
+        return "multiclass_classification"
     return "regression"
 
-# build dataset metadata
-def build_dataset_metadata(df, target_column: Optional[str] = None, seed: int = 42) -> dict:
-    # collect general info about the dataset
-    dataset = {}
-    dataset["path"] = PATH # path to the dataset
-    dataset["n_rows"] = len(df) # number of rows in the dataset
-    dataset["n_cols"] = len(df.columns) # number of columns in the dataset
 
-    total_cells = df.shape[0] * df.shape[1] # total cells in df
-    total_nulls = int(df.isna().sum().sum()) # get total null cells
-    missing_pct_total = float(total_nulls / max(total_cells, 1)) # get the total missing pct nulls
-    dataset["total_nulls"] = total_nulls # total null cells in df
-    dataset["missing_pct_total"] = missing_pct_total # pct of total cells missing
-    
-    dataset["target_column"] = target_column # target column match
-    target_present = target_column is not None # whether the target_column is present
+# ============================================================================
+# COMPACT PROFILE BUILDERS
+# ============================================================================
 
-    if target_present: # infer task hint (classification or regression) if target is present
-        task_hint = infer_task_hint(dataset["n_rows"], df[target_column].nunique(dropna=True), target_present)
-    else: # task is just data analysis
-        task_hint = "EDA"
-    dataset["task_hint"] = task_hint # task hint
-    dataset["column_names"] = df.columns.tolist() # list of column names
-    dataset["random_seed"] = 42 # random seed for reproducibility
-    
-    return dataset
+def _build_column_summary(df: pd.DataFrame, target_column: Optional[str] = None) -> list[dict]:
+    """
+    Build a compact column summary - just what the agent needs for planning.
+    Returns a list of column info dicts with essential metadata only.
+    """
+    n_rows = len(df)
+    columns = []
 
-# build target summary
-def build_target_summary(df, target_column: Optional[str] = None) -> dict:
-    target_summary = {}
-    
-    # get type of target
-    n_unique_target = df[target_column].nunique() # n unique labels
-    unique_ratio = n_unique_target / max(len(df), 1) # unique labels to rows ratio
-    if n_unique_target == 2:
-        target_type = "binary"
-    elif n_unique_target <= 20 and unique_ratio <= 0.2:
-        target_type = "multiclass"
-    else:
-        target_type = "continuous"
-    target_summary["type"] = target_type
-    
-    # get number of classes
-    if n_unique_target <= 20: # check if it's a regression problem first
-        target_summary["n_classes"] = n_unique_target
-    
-    # find imbalance ratio and class distribution
-    label_counts = []
-    class_distribution = []
-    # get label name, count, and percent for each label
-    for label in df[target_column].unique().tolist(): 
-        count = int((df[target_column] == label).sum())
-        label_counts.append(count)
-        class_distribution.append({"value": label, "count": count, "pct": round(count/len(df),2)})
-    # find imbalance by dividing highest represented label by the lowest
-    max_count = max(label_counts)
-    min_count = min(label_counts)
-    imbalance = max_count / min_count
-    
-    target_summary["class_imbalance"] = imbalance # set class imbalance
-    target_summary["class_distribution"] = class_distribution # show distribution of classes
-    
-    return target_summary
+    for col in df.columns:
+        series = df[col]
+        sem_type = _infer_semantic_type(series, n_rows)
+        n_missing = int(series.isna().sum())
+        n_unique = int(series.nunique(dropna=True))
 
-# create column profiles for the agent
-def build_column_profiles(df, target_column: Optional[str] = None):
-    column_data = []
-    
-    # list columns
-    columns = df.columns.to_list()
-    
-    for col in columns:
-        column = {}
-        column["name"] = col # use column name
-        # check if feature or target
-        column["role"] = "feature" if col != target_column else "label"
-        column["is_target"] = True if col == target_column else False
-        
-        column["pandas_dtype"] = str(df[col].dtype) # get column dtype
-        # find the semantic type for column
-        def _infer_semantic_type(s: pd.Series, n_rows: int) -> str:
-            if pd.api.types.is_bool_dtype(s):
-                return "binary_flag"
-
-            if pd.api.types.is_numeric_dtype(s):
-                n_unique = s.nunique(dropna=True)
-                unique_ratio = n_unique / max(n_rows, 1)
-
-                if n_unique == 2:
-                    return "binary_flag"
-
-                if n_unique <= 20 and unique_ratio <= 0.2:
-                    return "categorical"
-
-                return "numeric_continuous"
-
-            return "categorical"
-        
-        # get semantic type
-        semantic_type = _infer_semantic_type(df[col], len(df))
-        column["semantic_type"] = semantic_type
-        
-        # get total null values for column
-        n_nulls = int(df[col].isnull().sum()) 
-        column["n_missing"] = n_nulls
-        column["missing_pct"] = float(n_nulls / max(len(df), 1))
-        
-        # get n unique values and ratio for column
-        n_unique = df[col].nunique(dropna=True)
-        column["n_unique"] = n_unique
-        column["unique_ratio"] = n_unique / len(df)
-        
-        # give 5 column value examples
-        dropna_col = df[col].dropna()
-        column["examples"] = dropna_col.sample(min(5, len(dropna_col)), random_state=42).tolist() # 5 random samples
-        
-        # get column stats per semantic type
-        if semantic_type == "numeric_continuous":
-            col_numeric = df[col].describe().to_dict() # get describe nums in dict
-            column["numeric_stats"] = {k: round(v, 2) if isinstance(v, (int, float)) else v for k, v in col_numeric.items()} # round each value
-            
-        else: # create stats for a categorical column
-            counts = df[col].value_counts(dropna=True)
-            column["categorical_stats"] = {"top_values": [
-                {"value": str(v), "count": int(c), "pct": round(float(c / counts.sum()),2)}
-                for v, c in counts.head(5).items()
-            ]}
-        # append column to column data list
-        column_data.append(column)
-        
-    return column_data
-
-# extract top numeric correlations
-def extract_top_numeric_correlations(corr_matrix, top_k=10):
-    pairs = []
-
-    cols = corr_matrix.columns
-
-    for i in range(len(cols)):
-        for j in range(i + 1, len(cols)):  # upper triangle only
-            a = cols[i]
-            b = cols[j]
-            corr = corr_matrix.iloc[i, j]
-
-            pairs.append({
-                "col_a": a,
-                "col_b": b,
-                "corr": round(float(corr), 2),
-                "abs_corr": round(float(abs(corr)), 2)
-            })
-
-    # sort by absolute strength
-    pairs.sort(key=lambda x: x["abs_corr"], reverse=True)
-
-    return pairs[:top_k]
-
-# build numeric target signals
-def build_numeric_target_signals(df, column_profiles, target_column, top_k=10):
-    signals = []
-
-    # encode target as 0/1
-    y = df[target_column].astype("category").cat.codes
-    # get numeric features
-    for c in column_profiles:
-        if c["semantic_type"] == "numeric_continuous" and not c["is_target"]:
-            feature = c["name"]
-            corr = df[feature].corr(y)
-            # if correlation is not NaN, add to signals
-            if pd.notna(corr):
-                signals.append({
-                    "feature": feature,
-                    "metric": "point_biserial_corr",
-                    "score": round(float(corr), 2),
-                    "abs_score": round(abs(float(corr)), 2),
-                })
-
-    signals.sort(key=lambda x: x["abs_score"], reverse=True)
-    return signals[:top_k]
-
-# ----- helpers to build relationship profiles -----
-
-# build categorical target signals
-def build_categorical_target_signals(df, column_profiles, target_column, top_k=10, seed=42):
-    # Encode target labels to integers
-    y = df[target_column].astype("category").cat.codes
-
-    signals = []
-
-    for c in column_profiles:
-        if c["is_target"]:
-            continue
-
-        if c["semantic_type"] != "categorical" and c["semantic_type"] != "binary_flag":
-            continue
-
-        feature = c["name"]
-        x = df[feature]
-
-        # Encode categorical feature to integer codes
-        x_codes = x.astype("category").cat.codes
-
-        # mutual_info_classif expects 2D X
-        mi = mutual_info_classif(
-            X=x_codes.to_frame(),
-            y=y,
-            discrete_features=True,
-            random_state=seed
-        )[0]
-
-        signals.append({
-            "feature": feature,
-            "metric": "mutual_info",
-            "score": round(float(mi), 2)
-        })
-
-    # Sort strongest first
-    signals.sort(key=lambda d: d["score"], reverse=True)
-    return signals[:top_k]
-
-# ----- end helpers to build relationship profiles -----
-
-# build relationship profiles
-def build_relationship_profiles(df, column_profiles, target_column: Optional[str] = None):
-    relationships = {}
-    # get numeric columns
-    numeric_cols = [
-    c["name"] for c in column_profiles
-    if c["semantic_type"] == "numeric_continuous"
-    ]
-    
-    # if there are at least 2 numeric columns, get top 10 correlations
-    if len(numeric_cols) >= 2:
-        corr_matrix = df[numeric_cols].corr(method="pearson") # get all numeric correlations
-        top_pairs = extract_top_numeric_correlations(corr_matrix, top_k=10) # extract top 10 correlations
-        # add to relationships for agent
-        relationships["numeric_numeric_correlations"] = {
-            "method": "pearson",
-            "top_abs": top_pairs
+        col_info = {
+            "name": col,
+            "type": sem_type,
+            "missing": n_missing,
+            "unique": n_unique,
         }
 
-    # get numeric target signals
-    relationships["numeric_target_signals"] = build_numeric_target_signals(df, column_profiles, target_column, top_k=10)
+        # Add is_target flag only if this is the target
+        if col == target_column:
+            col_info["is_target"] = True
 
-    # get categorical target signals
-    relationships["categorical_target_signals"] = build_categorical_target_signals(df, column_profiles, target_column, top_k=10, seed=42)
+        # Add compact stats based on type
+        if sem_type == "numeric":
+            desc = series.describe()
+            col_info["stats"] = {
+                "min": round(float(desc["min"]), 2),
+                "max": round(float(desc["max"]), 2),
+                "mean": round(float(desc["mean"]), 2),
+                "std": round(float(desc["std"]), 2),
+            }
+        elif sem_type in ("categorical", "binary"):
+            top_vals = series.value_counts(dropna=True).head(3)
+            col_info["top_values"] = [str(v) for v in top_vals.index.tolist()]
 
-    
-    return relationships
+        columns.append(col_info)
 
-# grab random rows from dataset to show agent
-def build_row_samples(df, n_samples=15, seed=42):
-    clean_df = df.dropna()
-    if len(clean_df) == 0:
-        clean_df = df  # fallback if everything has nulls
+    return columns
 
-    n = min(n_samples, len(clean_df))
-    sample_df = clean_df.sample(n=n, random_state=seed)
-    return sample_df.to_dict(orient="records")
 
-# combine all the functions to build the complete dataset profile
-def build_dataset_profile(df, user_goal, target_column: Optional[str] = None, seed=42):
-    profile = {}
+def _build_target_info(df: pd.DataFrame, target_column: str) -> dict:
+    """Build compact target column info for modeling tasks."""
+    series = df[target_column]
+    task_type = _infer_task_type(series, len(df))
 
-    profile["user_goal"] = user_goal # add user's goal first
-    profile["dataset"] = build_dataset_metadata(df, target_column) # build dataset metadata
-    profile["columns"] = build_column_profiles(df, target_column) # build column profiles
-    if target_column: # only build target summary/relationship profiles if target is present
-        print("yes target")
-        profile["target_summary"] = build_target_summary(df, target_column) # build target summary
-        profile["relationships"] = build_relationship_profiles(df, profile["columns"], target_column) # build relationship profiles
-        
-    profile["row_samples"] = build_row_samples(df) # build row samples
+    info = {"task_type": task_type}
 
-    return profile # return the profile to be shown to the orchestrator agent
+    if task_type in ("binary_classification", "multiclass_classification"):
+        counts = series.value_counts(dropna=True)
+        info["classes"] = counts.index.tolist()
+        info["class_counts"] = counts.tolist()
+        # Imbalance ratio (max/min)
+        info["imbalance_ratio"] = round(counts.max() / max(counts.min(), 1), 2)
+    else:  # regression
+        desc = series.describe()
+        info["range"] = [round(float(desc["min"]), 2), round(float(desc["max"]), 2)]
+        info["mean"] = round(float(desc["mean"]), 2)
+
+    return info
+
+
+def _build_quality_flags(df: pd.DataFrame, columns: list[dict]) -> list[str]:
+    """
+    Generate actionable quality flags that inform cleaning decisions.
+    These are simple string flags the agent can use to decide what cleaning steps are needed.
+    """
+    flags = []
+    n_rows = len(df)
+
+    # Check for missing data
+    cols_with_missing = [c["name"] for c in columns if c["missing"] > 0]
+    if cols_with_missing:
+        pct = sum(c["missing"] for c in columns) / (n_rows * len(columns)) * 100
+        flags.append(f"missing_data:{len(cols_with_missing)}_cols:{pct:.1f}%_total")
+
+    # Check for high cardinality categoricals
+    high_card = [c["name"] for c in columns if c["type"] == "categorical" and c["unique"] > 50]
+    if high_card:
+        flags.append(f"high_cardinality:{','.join(high_card[:3])}")
+
+    # Check for potential ID columns (unique ratio > 0.9)
+    id_cols = [c["name"] for c in columns if c["unique"] / max(n_rows, 1) > 0.9 and c["type"] != "numeric"]
+    if id_cols:
+        flags.append(f"potential_id_columns:{','.join(id_cols[:3])}")
+
+    # Check for constant columns
+    constant = [c["name"] for c in columns if c["unique"] <= 1]
+    if constant:
+        flags.append(f"constant_columns:{','.join(constant)}")
+
+    return flags
+
+
+def _build_top_correlations(df: pd.DataFrame, target_column: Optional[str], columns: list[dict], top_k: int = 5) -> list[dict]:
+    """
+    Get top feature-target correlations/associations.
+    Returns a compact list for the agent to prioritize visualizations.
+    """
+    if not target_column:
+        return []
+
+    target_series = df[target_column]
+    numeric_cols = [c["name"] for c in columns if c["type"] == "numeric" and c["name"] != target_column]
+
+    if not numeric_cols:
+        return []
+
+    # Encode target if categorical
+    if not pd.api.types.is_numeric_dtype(target_series):
+        target_encoded = target_series.astype("category").cat.codes
+    else:
+        target_encoded = target_series
+
+    correlations = []
+    for col in numeric_cols:
+        corr = df[col].corr(target_encoded)
+        if pd.notna(corr):
+            correlations.append({
+                "feature": col,
+                "corr": round(float(corr), 3),
+                "abs": round(abs(float(corr)), 3)
+            })
+
+    # Sort by absolute correlation and return top_k
+    correlations.sort(key=lambda x: x["abs"], reverse=True)
+    return correlations[:top_k]
+
+
+def _build_feature_correlations(df: pd.DataFrame, columns: list[dict], top_k: int = 5) -> list[dict]:
+    """Get top feature-feature correlations for multicollinearity awareness."""
+    numeric_cols = [c["name"] for c in columns if c["type"] == "numeric"]
+
+    if len(numeric_cols) < 2:
+        return []
+
+    corr_matrix = df[numeric_cols].corr(method="pearson")
+    pairs = []
+
+    for i, col_a in enumerate(numeric_cols):
+        for col_b in numeric_cols[i+1:]:
+            corr = corr_matrix.loc[col_a, col_b]
+            if pd.notna(corr) and abs(corr) > 0.3:  # Only include notable correlations
+                pairs.append({
+                    "a": col_a,
+                    "b": col_b,
+                    "corr": round(float(corr), 3)
+                })
+
+    pairs.sort(key=lambda x: abs(x["corr"]), reverse=True)
+    return pairs[:top_k]
+
+
+# ============================================================================
+# MAIN PROFILE BUILDER
+# ============================================================================
+
+def build_dataset_profile(
+    df: pd.DataFrame,
+    user_goal: str,
+    target_column: Optional[str] = None,
+    analysis_mode: Literal["eda", "predictive", "hybrid"] = "eda"
+) -> dict:
+    """
+    Build a compact dataset profile optimized for the orchestrator agent.
+
+    The profile is designed to be:
+    - Small enough for fast LLM processing (< 2KB typically)
+    - Complete enough for informed planning decisions
+    - Structured for easy reference by column name
+
+    Args:
+        df: The pandas DataFrame to profile
+        user_goal: The user's stated analysis objective
+        target_column: Optional target column for predictive tasks
+        analysis_mode: One of "eda", "predictive", or "hybrid"
+
+    Returns:
+        A dict ready to be JSON-serialized and sent to the orchestrator
+    """
+    n_rows, n_cols = df.shape
+
+    # Build column summaries first (used by other builders)
+    columns = _build_column_summary(df, target_column)
+
+    # Core profile structure
+    profile = {
+        "goal": user_goal,
+        "mode": analysis_mode,
+        "shape": {"rows": n_rows, "cols": n_cols},
+        "columns": columns,
+    }
+
+    # Add quality flags for cleaning decisions
+    quality_flags = _build_quality_flags(df, columns)
+    if quality_flags:
+        profile["quality_flags"] = quality_flags
+
+    # Add target info for predictive/hybrid modes
+    if target_column and analysis_mode in ("predictive", "hybrid"):
+        profile["target"] = _build_target_info(df, target_column)
+
+        # Add feature-target correlations
+        target_corrs = _build_top_correlations(df, target_column, columns, top_k=5)
+        if target_corrs:
+            profile["target_correlations"] = target_corrs
+
+    # Add feature-feature correlations (useful for both EDA and modeling)
+    feature_corrs = _build_feature_correlations(df, columns, top_k=5)
+    if feature_corrs:
+        profile["feature_correlations"] = feature_corrs
+
+    return profile
