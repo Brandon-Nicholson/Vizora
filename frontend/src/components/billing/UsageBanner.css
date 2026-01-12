@@ -1,0 +1,110 @@
+.usage-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--spacing-lg);
+}
+
+.usage-banner.near-limit {
+  border-color: rgba(251, 191, 36, 0.5);
+  background: rgba(251, 191, 36, 0.05);
+}
+
+.usage-banner.at-limit {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.usage-content {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex: 1;
+}
+
+.usage-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.usage-banner.near-limit .usage-icon {
+  background: rgba(251, 191, 36, 0.1);
+  color: #fbbf24;
+}
+
+.usage-banner.at-limit .usage-icon {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.usage-text {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.usage-banner.near-limit .usage-text {
+  color: #fbbf24;
+}
+
+.usage-banner.at-limit .usage-text {
+  color: #ef4444;
+}
+
+.usage-progress {
+  flex: 1;
+  max-width: 150px;
+  height: 6px;
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.usage-progress-bar {
+  height: 100%;
+  background: var(--color-accent-primary);
+  border-radius: var(--radius-full);
+  transition: width 0.3s ease;
+}
+
+.usage-banner.near-limit .usage-progress-bar {
+  background: #fbbf24;
+}
+
+.usage-banner.at-limit .usage-progress-bar {
+  background: #ef4444;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .usage-banner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--spacing-md);
+  }
+
+  .usage-content {
+    flex-wrap: wrap;
+  }
+
+  .usage-progress {
+    width: 100%;
+    max-width: none;
+  }
+
+  .usage-banner .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}

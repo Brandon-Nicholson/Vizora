@@ -1,0 +1,155 @@
+{
+  "run_id": "39a16ad1-97f5-41ad-b68a-9168efd3a6e0",
+  "created_at": "2026-01-11T02:35:25.064009+00:00",
+  "target_column": "Heart Disease",
+  "task_type": "classification",
+  "feature_columns": [
+    "Age",
+    "Sex",
+    "Chest pain type",
+    "BP",
+    "Cholesterol",
+    "FBS over 120",
+    "EKG results",
+    "Max HR",
+    "Exercise angina",
+    "ST depression",
+    "Slope of ST",
+    "Number of vessels fluro",
+    "Thallium"
+  ],
+  "class_labels": [
+    "Absence",
+    "Presence"
+  ],
+  "preprocessing": {
+    "encodings": [
+      {
+        "column": "Sex",
+        "method": "label",
+        "classes": [
+          "0",
+          "1"
+        ]
+      },
+      {
+        "column": "Chest pain type",
+        "method": "onehot",
+        "classes": [
+          3,
+          4,
+          1,
+          2
+        ],
+        "output_columns": [
+          "Chest pain type_2",
+          "Chest pain type_3",
+          "Chest pain type_4"
+        ]
+      },
+      {
+        "column": "FBS over 120",
+        "method": "label",
+        "classes": [
+          "0",
+          "1"
+        ]
+      },
+      {
+        "column": "EKG results",
+        "method": "onehot",
+        "classes": [
+          0,
+          2,
+          1
+        ],
+        "output_columns": [
+          "EKG results_1",
+          "EKG results_2"
+        ]
+      },
+      {
+        "column": "Exercise angina",
+        "method": "label",
+        "classes": [
+          "0",
+          "1"
+        ]
+      },
+      {
+        "column": "Slope of ST",
+        "method": "onehot",
+        "classes": [
+          2,
+          1,
+          3
+        ],
+        "output_columns": [
+          "Slope of ST_2",
+          "Slope of ST_3"
+        ]
+      },
+      {
+        "column": "Number of vessels fluro",
+        "method": "onehot",
+        "classes": [
+          0,
+          2,
+          1,
+          3
+        ],
+        "output_columns": [
+          "Number of vessels fluro_1",
+          "Number of vessels fluro_2",
+          "Number of vessels fluro_3"
+        ]
+      },
+      {
+        "column": "Thallium",
+        "method": "onehot",
+        "classes": [
+          3,
+          7,
+          6
+        ],
+        "output_columns": [
+          "Thallium_6",
+          "Thallium_7"
+        ]
+      }
+    ],
+    "scaling": {
+      "method": "standard",
+      "columns": [
+        "Age",
+        "BP",
+        "Cholesterol",
+        "Max HR",
+        "ST depression"
+      ]
+    },
+    "target_encoding": {
+      "original_classes": [
+        "Absence",
+        "Presence"
+      ],
+      "mapping": {
+        "Absence": 0,
+        "Presence": 1
+      },
+      "positive_label": "Presence"
+    },
+    "train_test_split": {
+      "test_size": 0.2,
+      "stratify": true,
+      "random_state": 42,
+      "train_samples": 216,
+      "test_samples": 54
+    }
+  },
+  "label_mapping": {
+    "Absence": 0,
+    "Presence": 1
+  },
+  "positive_label": "Presence"
+}

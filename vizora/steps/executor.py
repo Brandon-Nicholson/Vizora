@@ -59,6 +59,12 @@ class ExecutionContext:
     errors: list = field(default_factory=list)
     label_mapping: dict = field(default_factory=dict)  # e.g. {"Absence": 0, "Presence": 1}
     positive_label: str | None = None
+    feature_columns: list[str] = field(default_factory=list)
+    preprocessing_artifacts: dict = field(default_factory=lambda: {
+        "label_encoders": {},  # column -> LabelEncoder
+        "onehot_columns": {},  # column -> list[str]
+        "scaler": None,        # fitted scaler
+    })
     # Preprocessing artifacts for reproducibility
     preprocessing: dict = field(default_factory=lambda: {
         "encodings": [],      # List of {"column": str, "method": "label"|"onehot", "classes": list}
@@ -175,12 +181,14 @@ def action_encode_categorical(ctx: ExecutionContext, spec: dict) -> str:
             encoding_info["classes"] = le.classes_.tolist()
             ctx.X_train[column] = le.transform(ctx.X_train[column].astype(str))
             ctx.X_test[column] = le.transform(ctx.X_test[column].astype(str))
+            ctx.preprocessing_artifacts["label_encoders"][column] = le
         elif method == "onehot":
             # Get dummies for train
             train_dummies = pd.get_dummies(ctx.X_train[column], prefix=column, drop_first=True)
             test_dummies = pd.get_dummies(ctx.X_test[column], prefix=column, drop_first=True)
             encoding_info["classes"] = ctx.X_train[column].unique().tolist()
             encoding_info["output_columns"] = train_dummies.columns.tolist()
+            ctx.preprocessing_artifacts["onehot_columns"][column] = train_dummies.columns.tolist()
 
             # Ensure test has same columns as train (handle unseen categories)
             for col in train_dummies.columns:
@@ -204,10 +212,12 @@ def action_encode_categorical(ctx: ExecutionContext, spec: dict) -> str:
             le.fit(ctx.df[column].astype(str))
             encoding_info["classes"] = le.classes_.tolist()
             ctx.df[column] = le.transform(ctx.df[column].astype(str))
+            ctx.preprocessing_artifacts["label_encoders"][column] = le
         elif method == "onehot":
             encoding_info["classes"] = ctx.df[column].unique().tolist()
             dummies = pd.get_dummies(ctx.df[column], prefix=column, drop_first=True)
             encoding_info["output_columns"] = dummies.columns.tolist()
+            ctx.preprocessing_artifacts["onehot_columns"][column] = dummies.columns.tolist()
             ctx.df = ctx.df.drop(columns=[column])
             ctx.df = pd.concat([ctx.df, dummies], axis=1)
         else:
@@ -244,6 +254,7 @@ def action_scale_numeric(ctx: ExecutionContext, spec: dict) -> str:
         scaler.fit(ctx.X_train[existing])
         ctx.X_train[existing] = scaler.transform(ctx.X_train[existing])
         ctx.X_test[existing] = scaler.transform(ctx.X_test[existing])
+        ctx.preprocessing_artifacts["scaler"] = scaler
     else:
         # Pre-split scaling (for EDA mode)
         existing = [c for c in columns if c in ctx.df.columns]
@@ -251,6 +262,7 @@ def action_scale_numeric(ctx: ExecutionContext, spec: dict) -> str:
             return "No valid columns to scale"
 
         ctx.df[existing] = scaler.fit_transform(ctx.df[existing])
+        ctx.preprocessing_artifacts["scaler"] = scaler
 
     # Track scaling for reproducibility
     ctx.preprocessing["scaling"] = {"method": method, "columns": existing}
@@ -494,6 +506,7 @@ def action_train_test_split(ctx: ExecutionContext, spec: dict) -> str:
     ctx.X_train, ctx.X_test, ctx.y_train, ctx.y_test = train_test_split(
         X, y, test_size=test_size, random_state=42, stratify=strat
     )
+    ctx.feature_columns = X.columns.tolist()
 
     # Track split parameters for reproducibility
     ctx.preprocessing["train_test_split"] = {

@@ -1,0 +1,105 @@
+.predict-panel {
+  display: flex;
+  justify-content: center;
+}
+
+.predict-card {
+  width: min(720px, 100%);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl);
+  box-shadow: var(--shadow-md);
+}
+
+.predict-header h3 {
+  margin-bottom: var(--spacing-xs);
+}
+
+.predict-header p {
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.predict-body {
+  margin-top: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.predict-upload {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.predict-upload input {
+  display: none;
+}
+
+.predict-upload span {
+  color: var(--color-text-secondary);
+}
+
+.predict-error {
+  padding: var(--spacing-md);
+  background: rgba(255, 72, 66, 0.08);
+  border: 1px solid rgba(255, 72, 66, 0.35);
+  border-radius: var(--radius-md);
+  color: #ff4842;
+}
+
+.missing-columns {
+  margin-top: var(--spacing-xs);
+  color: var(--color-text-secondary);
+}
+
+.btn-glow {
+  box-shadow: 0 0 18px rgba(0, 212, 255, 0.35);
+  border-color: rgba(0, 212, 255, 0.5);
+}
+
+.predict-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.predict-preview h4 {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.preview-table {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+  background: var(--color-bg-secondary);
+}
+
+.preview-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+.preview-table th,
+.preview-table td {
+  padding: var(--spacing-sm);
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+
+.preview-table th {
+  color: var(--color-text-muted);
+  font-weight: 600;
+  background: rgba(0, 212, 255, 0.05);
+}

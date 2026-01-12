@@ -1,0 +1,114 @@
+.models-panel {
+  margin-top: var(--spacing-3xl);
+  width: min(900px, 100%);
+  text-align: left;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl);
+}
+
+.models-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-lg);
+}
+
+.models-count {
+  background: var(--color-bg-secondary);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.models-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.model-card {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+  flex-wrap: wrap;
+}
+
+.model-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  min-width: 240px;
+  flex: 1;
+}
+
+.model-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-weight: 600;
+}
+
+.model-task {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+
+.model-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.model-metric {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: baseline;
+  color: var(--color-text-primary);
+}
+
+.model-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  align-items: flex-start;
+}
+
+.model-delete {
+  border-color: rgba(255, 71, 87, 0.4);
+  color: var(--color-warning);
+}
+
+.model-delete:hover {
+  border-color: rgba(255, 71, 87, 0.8);
+  color: var(--color-warning);
+}
+
+.models-empty {
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .model-card {
+    flex-direction: column;
+  }
+
+  .model-actions {
+    width: 100%;
+  }
+
+  .model-actions .btn {
+    width: 100%;
+  }
+}
