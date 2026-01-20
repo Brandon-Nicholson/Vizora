@@ -31,11 +31,18 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return response.json()
 }
 
+export interface ForecastOptions {
+  horizon?: number
+  frequency?: 'daily' | 'weekly' | 'monthly'
+  dateColumn?: string
+}
+
 export async function startAnalysis(
   file: File,
   mode: string,
   goal: string,
-  targetColumn?: string
+  targetColumn?: string,
+  forecastOptions?: ForecastOptions
 ): Promise<JobCreatedResponse> {
   const formData = new FormData()
   formData.append('file', file)
@@ -43,6 +50,17 @@ export async function startAnalysis(
   formData.append('goal', goal)
   if (targetColumn) {
     formData.append('target_column', targetColumn)
+  }
+  if (forecastOptions) {
+    if (forecastOptions.horizon) {
+      formData.append('forecast_horizon', forecastOptions.horizon.toString())
+    }
+    if (forecastOptions.frequency) {
+      formData.append('forecast_frequency', forecastOptions.frequency)
+    }
+    if (forecastOptions.dateColumn) {
+      formData.append('date_column', forecastOptions.dateColumn)
+    }
   }
 
   const authHeaders = await getAuthHeaders()

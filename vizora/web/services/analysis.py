@@ -7,7 +7,7 @@ import pandas as pd
 from typing import Optional, Callable
 
 from vizora.llm.client import get_orchestrator, Summarizer
-from vizora.steps.profiling import build_dataset_profile, resolve_target_column
+from vizora.steps.profiling import build_dataset_profile, resolve_date_column, resolve_target_column
 from vizora.steps.executor import execute_plan
 
 from vizora.web.models.responses import AnalysisResult, FigureData
@@ -33,17 +33,24 @@ class AnalysisService:
         goal: str,
         target_column: Optional[str] = None,
         progress_callback: Optional[Callable[[str, int], None]] = None,
-        run_id: Optional[str] = None
+        run_id: Optional[str] = None,
+        forecast_horizon: Optional[int] = None,
+        forecast_frequency: Optional[str] = None,
+        date_column: Optional[str] = None
     ) -> AnalysisResult:
         """
         Run the full analysis pipeline.
 
         Args:
             df: The dataset to analyze.
-            mode: Analysis mode (eda, predictive, hybrid).
+            mode: Analysis mode (eda, predictive, hybrid, forecast).
             goal: User's analysis goal.
             target_column: Target column name (optional).
             progress_callback: Optional callback for progress updates.
+            run_id: Optional run ID for artifact persistence.
+            forecast_horizon: Number of periods to forecast (forecast mode).
+            forecast_frequency: Forecast frequency (daily, weekly, monthly).
+            date_column: Date column name for time series.
 
         Returns:
             AnalysisResult with figures, metrics, summary, and plan.
@@ -62,12 +69,24 @@ class AnalysisService:
                 # If no match found, leave as None
                 pass
 
-        # Step 2: Build dataset profile
+        # Step 2: Resolve date column
+        update_progress("Resolving date column...", 8)
+        date_match = None
+        if date_column:
+            date_match = resolve_date_column(df.columns, date_column)
+
+        # Step 3: Build dataset profile
         update_progress("Building dataset profile...", 10)
-        profile = build_dataset_profile(df, goal, target_match, analysis_mode=mode)
+        profile = build_dataset_profile(
+            df, goal, target_match,
+            analysis_mode=mode,
+            forecast_horizon=forecast_horizon,
+            forecast_frequency=forecast_frequency,
+            date_column=date_match
+        )
         profile_json = json.dumps(profile)
 
-        # Step 3: Get plan from orchestrator
+        # Step 4: Get plan from orchestrator
         update_progress("Generating analysis plan...", 25)
         orchestrator = get_orchestrator(mode)
         plan_result = orchestrator.get_plan(profile_json)
@@ -77,11 +96,11 @@ class AnalysisService:
 
         plan = plan_result["plan"]
 
-        # Step 4: Execute plan
+        # Step 5: Execute plan
         update_progress("Executing analysis plan...", 40)
         ctx = execute_plan(df, plan, target_column=target_match, show_progress=False)
 
-        # Step 4b: Persist model artifacts if available
+        # Step 5b: Persist model artifacts if available
         if run_id and ctx.model is not None:
             try:
                 model_pipeline = build_model_pipeline(ctx)
@@ -91,11 +110,11 @@ class AnalysisService:
             except Exception as e:
                 ctx.errors.append(f"Artifact persistence failed: {e}")
 
-        # Step 5: Convert figures to base64
+        # Step 6: Convert figures to base64
         update_progress("Processing visualizations...", 75)
         figures = convert_figures(ctx.figures) if ctx.figures else []
 
-        # Step 6: Generate summary
+        # Step 7: Generate summary
         update_progress("Generating AI summary...", 85)
         dataset_info = {
             "rows": len(df),
@@ -103,19 +122,29 @@ class AnalysisService:
             "target": target_match,
         }
 
+        # Build forecast config for summarizer
+        forecast_config = None
+        if mode == "forecast":
+            forecast_config = {
+                "horizon": forecast_horizon,
+                "frequency": forecast_frequency,
+                "date_column": date_match,
+            }
+
         summary_result = self.summarizer.summarize(
             goal=goal,
             mode=mode,
             dataset_info=dataset_info,
             results=ctx.results,
-            plan_notes=plan.get("notes", [])
+            plan_notes=plan.get("notes", []),
+            forecast_config=forecast_config
         )
 
         summary_markdown = summary_result.get("summary", "")
         if summary_result.get("error"):
             summary_markdown = f"*Summary generation failed: {summary_result['error']}*"
 
-        # Step 7: Build result
+        # Step 8: Build result
         update_progress("Complete!", 100)
 
         return AnalysisResult(

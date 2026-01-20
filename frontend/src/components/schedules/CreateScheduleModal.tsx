@@ -34,7 +34,7 @@ export default function CreateScheduleModal({ onClose, onCreated }: Props) {
   const [selectedSpreadsheetId, setSelectedSpreadsheetId] = useState('')
   const [sheets, setSheets] = useState<Sheet[]>([])
   const [selectedSheetName, setSelectedSheetName] = useState('')
-  const [analysisMode, setAnalysisMode] = useState<'explore' | 'predict'>('explore')
+  const [analysisMode, setAnalysisMode] = useState<'eda' | 'predictive'>('eda')
   const [analysisGoal, setAnalysisGoal] = useState('')
   const [targetColumn, setTargetColumn] = useState('')
   const [isLoadingSheets, setIsLoadingSheets] = useState(false)
@@ -113,7 +113,7 @@ export default function CreateScheduleModal({ onClose, onCreated }: Props) {
       return
     }
 
-    if (analysisMode === 'predict' && !targetColumn.trim()) {
+    if (analysisMode === 'predictive' && !targetColumn.trim()) {
       setError('Please enter a target column for prediction')
       return
     }
@@ -137,7 +137,7 @@ export default function CreateScheduleModal({ onClose, onCreated }: Props) {
       data.sheet_name = selectedSheetName || undefined
       data.analysis_mode = analysisMode
       data.analysis_goal = analysisGoal.trim()
-      if (analysisMode === 'predict' && targetColumn.trim()) {
+      if (analysisMode === 'predictive' && targetColumn.trim()) {
         data.target_column = targetColumn.trim()
       }
 
@@ -263,15 +263,15 @@ export default function CreateScheduleModal({ onClose, onCreated }: Props) {
               <div className="frequency-options">
                 <button
                   type="button"
-                  className={`frequency-btn ${analysisMode === 'explore' ? 'active' : ''}`}
-                  onClick={() => setAnalysisMode('explore')}
+                  className={`frequency-btn ${analysisMode === 'eda' ? 'active' : ''}`}
+                  onClick={() => setAnalysisMode('eda')}
                 >
                   Explore
                 </button>
                 <button
                   type="button"
-                  className={`frequency-btn ${analysisMode === 'predict' ? 'active' : ''}`}
-                  onClick={() => setAnalysisMode('predict')}
+                  className={`frequency-btn ${analysisMode === 'predictive' ? 'active' : ''}`}
+                  onClick={() => setAnalysisMode('predictive')}
                 >
                   Predict
                 </button>
@@ -291,7 +291,7 @@ export default function CreateScheduleModal({ onClose, onCreated }: Props) {
               />
             </div>
 
-            {analysisMode === 'predict' && (
+            {analysisMode === 'predictive' && (
               <div className="form-group">
                 <label htmlFor="targetColumn">Target Column</label>
                 <input

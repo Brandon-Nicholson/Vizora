@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 
 from vizora.web.routes import health_router, analysis_router, auth_router, billing_router, schedules_router, google_router
 from vizora.web.services.file_manager import file_manager
+from vizora.web.scheduler import scheduler_service
 
 
 @asynccontextmanager
@@ -31,10 +32,20 @@ async def lifespan(app: FastAPI):
     if deleted:
         print(f"Cleaned up {deleted} old temporary files")
 
+    # Startup: Initialize the scheduler to load and run scheduled reports
+    # Accessing the scheduler property triggers lazy initialization
+    _ = scheduler_service.scheduler
+    print("Scheduler service initialized")
+
     yield
 
     # Shutdown: cleanup all temp files
     file_manager.cleanup_old_files()
+
+    # Shutdown: stop the scheduler gracefully
+    if scheduler_service._scheduler is not None:
+        scheduler_service._scheduler.shutdown(wait=False)
+        print("Scheduler service stopped")
 
 
 # Create FastAPI application

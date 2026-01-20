@@ -793,6 +793,371 @@ def action_prediction_vs_actual(ctx: ExecutionContext, spec: dict) -> str:
 
 
 # =============================================================================
+# FORECAST ACTIONS
+# =============================================================================
+
+@register_action("set_datetime_index")
+def action_set_datetime_index(ctx: ExecutionContext, spec: dict) -> str:
+    """Set a column as datetime index for time series analysis."""
+    column = spec.get("column")
+
+    if column not in ctx.df.columns:
+        return f"Column '{column}' not found"
+
+    try:
+        ctx.df[column] = pd.to_datetime(ctx.df[column])
+        ctx.df = ctx.df.sort_values(column)
+        ctx.df = ctx.df.set_index(column)
+        ctx.results["datetime_index"] = column
+        return f"Set '{column}' as datetime index"
+    except Exception as e:
+        return f"Failed to set datetime index: {e}"
+
+
+@register_action("seasonal_decompose")
+def action_seasonal_decompose(ctx: ExecutionContext, spec: dict) -> str:
+    """Decompose time series into trend, seasonal, and residual components."""
+    from statsmodels.tsa.seasonal import seasonal_decompose
+
+    column = spec.get("column")
+    model = spec.get("model", "additive")  # "additive" or "multiplicative"
+    period = spec.get("period")  # Auto-detect if not provided
+
+    if column not in ctx.df.columns:
+        return f"Column '{column}' not found"
+
+    series = ctx.df[column].dropna()
+
+    # Auto-detect period if not provided
+    if period is None:
+        freq = pd.infer_freq(ctx.df.index)
+        if freq:
+            if freq.startswith('D'):
+                period = 7  # Weekly seasonality for daily data
+            elif freq.startswith('W'):
+                period = 52  # Yearly for weekly
+            elif freq.startswith('M'):
+                period = 12  # Yearly for monthly
+            else:
+                period = 7  # Default
+        else:
+            period = 7
+
+    try:
+        decomposition = seasonal_decompose(series, model=model, period=period)
+
+        # Create decomposition plot
+        fig, axes = plt.subplots(4, 1, figsize=(12, 10))
+
+        decomposition.observed.plot(ax=axes[0], title="Observed")
+        decomposition.trend.plot(ax=axes[1], title="Trend")
+        decomposition.seasonal.plot(ax=axes[2], title="Seasonal")
+        decomposition.resid.plot(ax=axes[3], title="Residual")
+
+        for ax in axes:
+            ax.set_xlabel("")
+        plt.tight_layout()
+
+        ctx.figures.append(("seasonal_decompose", column, fig))
+        ctx.results["decomposition"] = {
+            "column": column,
+            "model": model,
+            "period": period,
+            "trend_mean": float(decomposition.trend.mean()) if not decomposition.trend.isna().all() else None,
+            "seasonal_strength": float(decomposition.seasonal.std()) if not decomposition.seasonal.isna().all() else None,
+        }
+        return f"Decomposed '{column}' ({model} model, period={period})"
+    except Exception as e:
+        return f"Decomposition failed: {e}"
+
+
+@register_action("autocorrelation_plot")
+def action_autocorrelation_plot(ctx: ExecutionContext, spec: dict) -> str:
+    """Create ACF and PACF plots for time series analysis."""
+    from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
+
+    column = spec.get("column")
+    lags = spec.get("lags", 40)
+
+    if column not in ctx.df.columns:
+        return f"Column '{column}' not found"
+
+    series = ctx.df[column].dropna()
+
+    try:
+        fig, axes = plt.subplots(2, 1, figsize=(12, 8))
+
+        plot_acf(series, lags=min(lags, len(series) // 2 - 1), ax=axes[0])
+        axes[0].set_title(f"Autocorrelation Function (ACF) - {column}")
+
+        plot_pacf(series, lags=min(lags, len(series) // 2 - 1), ax=axes[1])
+        axes[1].set_title(f"Partial Autocorrelation Function (PACF) - {column}")
+
+        plt.tight_layout()
+        ctx.figures.append(("autocorrelation", column, fig))
+        return f"Created ACF/PACF plots for '{column}'"
+    except Exception as e:
+        return f"Autocorrelation plot failed: {e}"
+
+
+@register_action("time_series_plot")
+def action_time_series_plot(ctx: ExecutionContext, spec: dict) -> str:
+    """Create a time series line plot."""
+    column = spec.get("column")
+    rolling_window = spec.get("rolling_window")  # Optional moving average
+
+    if column not in ctx.df.columns:
+        return f"Column '{column}' not found"
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+
+    ax.plot(ctx.df.index, ctx.df[column], label=column, alpha=0.7)
+
+    if rolling_window:
+        rolling_mean = ctx.df[column].rolling(window=rolling_window).mean()
+        ax.plot(ctx.df.index, rolling_mean, label=f"{rolling_window}-period MA",
+                color='red', linewidth=2)
+
+    ax.set_xlabel("Date")
+    ax.set_ylabel(column)
+    ax.set_title(f"Time Series: {column}")
+    ax.legend()
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+
+    ctx.figures.append(("time_series", column, fig))
+    return f"Created time series plot for '{column}'"
+
+
+@register_action("train_forecast_model")
+def action_train_forecast_model(ctx: ExecutionContext, spec: dict) -> str:
+    """Train a forecasting model (Prophet or Exponential Smoothing)."""
+    model_type = spec.get("model", "prophet")  # "prophet", "exponential_smoothing", "linear_trend"
+    column = spec.get("column")
+    horizon = spec.get("horizon", 30)
+    frequency = spec.get("frequency", "D")  # D=daily, W=weekly, M=monthly
+
+    if column not in ctx.df.columns:
+        return f"Column '{column}' not found"
+
+    series = ctx.df[column].dropna()
+
+    # Map frequency string to pandas offset
+    freq_map = {"daily": "D", "weekly": "W", "monthly": "MS", "D": "D", "W": "W", "M": "MS"}
+    freq = freq_map.get(frequency, "D")
+
+    try:
+        if model_type == "prophet":
+            from prophet import Prophet
+
+            # Prophet expects 'ds' and 'y' columns
+            prophet_df = pd.DataFrame({
+                'ds': series.index,
+                'y': series.values
+            })
+
+            model = Prophet(yearly_seasonality=True, weekly_seasonality=(freq == "D"))
+            model.fit(prophet_df)
+
+            # Make future dataframe
+            future = model.make_future_dataframe(periods=horizon, freq=freq)
+            forecast = model.predict(future)
+
+            ctx.models["prophet"] = model
+            ctx.results["forecast"] = {
+                "model": "prophet",
+                "horizon": horizon,
+                "frequency": freq,
+                "predictions": forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(horizon).to_dict('records'),
+            }
+            ctx.current_model_name = "prophet"
+            return f"Trained Prophet model, forecasting {horizon} periods"
+
+        elif model_type == "exponential_smoothing":
+            from statsmodels.tsa.holtwinters import ExponentialSmoothing
+
+            # Determine seasonality
+            seasonal_periods = {"D": 7, "W": 52, "MS": 12}.get(freq, None)
+
+            model = ExponentialSmoothing(
+                series,
+                trend="add",
+                seasonal="add" if seasonal_periods else None,
+                seasonal_periods=seasonal_periods,
+            ).fit()
+
+            forecast = model.forecast(horizon)
+
+            ctx.models["exponential_smoothing"] = model
+            ctx.results["forecast"] = {
+                "model": "exponential_smoothing",
+                "horizon": horizon,
+                "frequency": freq,
+                "predictions": [{"ds": str(idx), "yhat": float(val)} for idx, val in forecast.items()],
+            }
+            ctx.current_model_name = "exponential_smoothing"
+            return f"Trained Exponential Smoothing model, forecasting {horizon} periods"
+
+        elif model_type == "linear_trend":
+            from sklearn.linear_model import LinearRegression
+
+            # Create numeric time index
+            X = np.arange(len(series)).reshape(-1, 1)
+            y = series.values
+
+            model = LinearRegression()
+            model.fit(X, y)
+
+            # Forecast future
+            future_X = np.arange(len(series), len(series) + horizon).reshape(-1, 1)
+            predictions = model.predict(future_X)
+
+            # Generate future dates
+            last_date = series.index[-1]
+            future_dates = pd.date_range(start=last_date, periods=horizon + 1, freq=freq)[1:]
+
+            ctx.models["linear_trend"] = model
+            ctx.results["forecast"] = {
+                "model": "linear_trend",
+                "horizon": horizon,
+                "frequency": freq,
+                "slope": float(model.coef_[0]),
+                "intercept": float(model.intercept_),
+                "predictions": [{"ds": str(d), "yhat": float(p)} for d, p in zip(future_dates, predictions)],
+            }
+            ctx.current_model_name = "linear_trend"
+            return f"Trained Linear Trend model (slope={model.coef_[0]:.4f}), forecasting {horizon} periods"
+        else:
+            return f"Unknown forecast model type: {model_type}"
+
+    except ImportError as e:
+        return f"Required library not installed: {e}"
+    except Exception as e:
+        return f"Forecast model training failed: {e}"
+
+
+@register_action("forecast_plot")
+def action_forecast_plot(ctx: ExecutionContext, spec: dict) -> str:
+    """Plot historical data with forecast and confidence intervals."""
+    column = spec.get("column")
+    show_history = spec.get("show_history", 90)  # Days of history to show
+
+    if "forecast" not in ctx.results:
+        return "Must train forecast model first"
+
+    if column not in ctx.df.columns:
+        return f"Column '{column}' not found"
+
+    forecast_data = ctx.results["forecast"]
+    model_name = forecast_data["model"]
+    predictions = forecast_data["predictions"]
+
+    fig, ax = plt.subplots(figsize=(14, 7))
+
+    # Plot historical data (last N periods)
+    history = ctx.df[column].tail(show_history)
+    ax.plot(history.index, history.values, label="Historical", color="blue", linewidth=1.5)
+
+    # Plot forecast
+    forecast_dates = pd.to_datetime([p["ds"] for p in predictions])
+    forecast_values = [p["yhat"] for p in predictions]
+    ax.plot(forecast_dates, forecast_values, label="Forecast", color="orange", linewidth=2)
+
+    # Plot confidence intervals if available (Prophet)
+    if "yhat_lower" in predictions[0]:
+        lower = [p["yhat_lower"] for p in predictions]
+        upper = [p["yhat_upper"] for p in predictions]
+        ax.fill_between(forecast_dates, lower, upper, alpha=0.3, color="orange", label="95% CI")
+
+    ax.set_xlabel("Date")
+    ax.set_ylabel(column)
+    ax.set_title(f"Forecast: {column} ({model_name})")
+    ax.legend()
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+
+    ctx.figures.append(("forecast", column, fig))
+    return f"Created forecast plot for '{column}'"
+
+
+@register_action("forecast_metrics")
+def action_forecast_metrics(ctx: ExecutionContext, spec: dict) -> str:
+    """Calculate forecast accuracy metrics using historical data (backtesting)."""
+    column = spec.get("column")
+    test_periods = spec.get("test_periods", 30)  # Hold out last N periods for testing
+
+    if column not in ctx.df.columns:
+        return f"Column '{column}' not found"
+
+    series = ctx.df[column].dropna()
+
+    if len(series) < test_periods * 2:
+        return f"Not enough data for backtesting (need at least {test_periods * 2} periods)"
+
+    # Split into train/test
+    train = series[:-test_periods]
+    test = series[-test_periods:]
+
+    try:
+        # Use simple exponential smoothing for backtesting
+        from statsmodels.tsa.holtwinters import ExponentialSmoothing
+
+        model = ExponentialSmoothing(train, trend="add").fit()
+        predictions = model.forecast(test_periods)
+
+        # Calculate metrics
+        mae = float(np.mean(np.abs(test.values - predictions.values)))
+        rmse = float(np.sqrt(np.mean((test.values - predictions.values) ** 2)))
+        mape = float(np.mean(np.abs((test.values - predictions.values) / test.values)) * 100)
+
+        # Direction accuracy (did we predict up/down correctly?)
+        actual_direction = np.sign(np.diff(test.values))
+        pred_direction = np.sign(np.diff(predictions.values))
+        direction_accuracy = float(np.mean(actual_direction == pred_direction) * 100)
+
+        metrics = {
+            "mae": round(mae, 4),
+            "rmse": round(rmse, 4),
+            "mape": round(mape, 2),
+            "direction_accuracy": round(direction_accuracy, 2),
+            "test_periods": test_periods,
+        }
+
+        ctx.results["forecast_metrics"] = metrics
+        return f"Forecast metrics: MAE={mae:.2f}, RMSE={rmse:.2f}, MAPE={mape:.1f}%"
+
+    except Exception as e:
+        return f"Forecast metrics calculation failed: {e}"
+
+
+@register_action("trend_components_plot")
+def action_trend_components_plot(ctx: ExecutionContext, spec: dict) -> str:
+    """Plot trend components from Prophet model."""
+    if "prophet" not in ctx.models:
+        return "Must train Prophet model first"
+
+    try:
+        from prophet import Prophet
+
+        model = ctx.models["prophet"]
+
+        # Get the forecast data
+        forecast_data = ctx.results.get("forecast", {})
+        predictions = forecast_data.get("predictions", [])
+
+        if not predictions:
+            return "No forecast data available"
+
+        # Create component plot
+        fig = model.plot_components(model.predict(model.make_future_dataframe(periods=len(predictions))))
+        ctx.figures.append(("trend_components", "prophet", fig))
+        return "Created Prophet trend components plot"
+
+    except Exception as e:
+        return f"Trend components plot failed: {e}"
+
+
+# =============================================================================
 # PLAN EXECUTOR
 # =============================================================================
 
@@ -817,7 +1182,7 @@ def execute_plan(
     ctx = ExecutionContext(df=df.copy(), target_column=target_column)
 
     # Define execution order
-    sections = ["cleaning", "eda", "analysis", "preprocessing", "modeling", "evaluation"]
+    sections = ["cleaning", "eda", "analysis", "preprocessing", "modeling", "evaluation", "forecast"]
 
     for section in sections:
         if section not in plan:

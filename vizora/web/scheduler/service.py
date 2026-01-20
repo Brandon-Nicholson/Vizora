@@ -56,11 +56,18 @@ class SchedulerService:
     def _add_job_from_record(self, schedule: dict):
         """Add a scheduler job from a database record."""
         schedule_id = schedule["id"]
-        frequency = schedule["frequency"]
         cron_expression = schedule.get("cron_expression")
 
-        trigger = self._create_trigger(frequency, cron_expression)
-        if trigger:
+        # Always use cron expression - it should be set during creation
+        if not cron_expression:
+            # Fallback: generate cron from stored frequency/hour/day_of_week
+            frequency = schedule["frequency"]
+            hour = schedule.get("hour", 9)
+            day_of_week = schedule.get("day_of_week", 0)
+            cron_expression = self._generate_cron_expression(frequency, hour, day_of_week)
+
+        if cron_expression:
+            trigger = CronTrigger.from_crontab(cron_expression)
             self.scheduler.add_job(
                 self._execute_scheduled_report,
                 trigger=trigger,
@@ -68,16 +75,29 @@ class SchedulerService:
                 args=[schedule_id],
                 replace_existing=True,
             )
+            print(f"Loaded schedule '{schedule.get('name')}' with cron: {cron_expression}")
+
+    def _generate_cron_expression(self, frequency: str, hour: int, day_of_week: Optional[int]) -> Optional[str]:
+        """Generate cron expression from frequency settings."""
+        if frequency == "daily":
+            return f"0 {hour} * * *"
+        elif frequency == "weekly":
+            dow = day_of_week if day_of_week is not None else 0
+            return f"0 {hour} * * {dow}"
+        elif frequency == "monthly":
+            return f"0 {hour} 1 * *"
+        return None
 
     def _create_trigger(self, frequency: str, cron_expression: Optional[str] = None):
         """Create APScheduler trigger from frequency."""
         if cron_expression:
             return CronTrigger.from_crontab(cron_expression)
 
+        # Fallback - shouldn't be used since we always generate cron expressions
         triggers = {
-            "daily": IntervalTrigger(days=1),
-            "weekly": IntervalTrigger(weeks=1),
-            "monthly": CronTrigger(day=1, hour=9),  # 1st of month at 9am
+            "daily": CronTrigger(hour=9, minute=0),
+            "weekly": CronTrigger(day_of_week=0, hour=9, minute=0),
+            "monthly": CronTrigger(day=1, hour=9, minute=0),
         }
         return triggers.get(frequency)
 
@@ -233,8 +253,15 @@ class SchedulerService:
             return f"1st of each month at {hour_str}"
         return frequency
 
-    def _execute_scheduled_report(self, schedule_id: str):
-        """Execute a scheduled report job."""
+    def _execute_scheduled_report(self, schedule_id: str, raise_on_error: bool = False):
+        """
+        Execute a scheduled report job.
+
+        Args:
+            schedule_id: The schedule ID to execute
+            raise_on_error: If True, re-raise exceptions instead of just logging them.
+                           Use True for manual "Run Now" triggers to show errors to user.
+        """
         try:
             # Get schedule details
             result = (
@@ -245,8 +272,10 @@ class SchedulerService:
                 .execute()
             )
             schedule = result.data
-            if not schedule or not schedule.get("is_active"):
-                return
+            if not schedule:
+                raise Exception(f"Schedule {schedule_id} not found")
+            if not schedule.get("is_active"):
+                raise Exception(f"Schedule {schedule_id} is paused")
 
             # Check if this schedule uses Google Sheets as data source
             spreadsheet_id = schedule.get("spreadsheet_id")
@@ -275,15 +304,20 @@ class SchedulerService:
             }).eq("id", schedule["id"]).execute()
 
         except Exception as e:
-            print(f"Failed to execute scheduled report {schedule_id}: {e}")
-            # Log the error
+            error_msg = str(e)
+            print(f"Failed to execute scheduled report {schedule_id}: {error_msg}")
+            # Log the error to database
             try:
                 supabase_client.table("schedules").update({
-                    "last_error": str(e),
+                    "last_error": error_msg,
                     "last_error_at": datetime.now().isoformat(),
                 }).eq("id", schedule_id).execute()
             except Exception:
                 pass
+
+            # Re-raise if requested (for manual triggers)
+            if raise_on_error:
+                raise
 
     def _execute_with_fresh_data(self, schedule: dict):
         """
@@ -291,39 +325,59 @@ class SchedulerService:
         Runs a new analysis on the latest data.
         """
         from vizora.web.google.sheets import sheets_service
+        from vizora.web.google.oauth import google_oauth
         from vizora.web.services.pdf_generator import pdf_generator
-        from vizora.pipeline import run_pipeline
+        from vizora.web.services.analysis import analysis_service
 
         user_id = schedule["user_id"]
         spreadsheet_id = schedule["spreadsheet_id"]
         sheet_name = schedule.get("sheet_name")
 
+        # Check if user has Google connected
+        if not google_oauth.is_connected(user_id):
+            raise Exception(
+                "Google account not connected. Please reconnect your Google account "
+                "in Settings to continue receiving scheduled reports."
+            )
+
         # Fetch fresh data from Google Sheets
         df = sheets_service.read_sheet_data(user_id, spreadsheet_id, sheet_name)
-        if df is None or df.empty:
-            raise Exception("Failed to fetch data from Google Sheets or sheet is empty")
-
-        # Convert DataFrame to CSV bytes for the pipeline
-        csv_buffer = io.BytesIO()
-        df.to_csv(csv_buffer, index=False)
-        csv_buffer.seek(0)
-        csv_bytes = csv_buffer.getvalue()
+        if df is None:
+            raise Exception(
+                f"Failed to fetch data from Google Sheets. "
+                f"Check that you have access to spreadsheet {spreadsheet_id}"
+            )
+        if df.empty:
+            raise Exception("Google Sheet is empty - no data to analyze")
 
         # Get analysis parameters
-        mode = schedule.get("analysis_mode", "explore")
+        mode = schedule.get("analysis_mode", "eda")
+        # Map legacy mode names to current ones
+        mode_mapping = {"explore": "eda", "predict": "predictive"}
+        mode = mode_mapping.get(mode, mode)
+
         goal = schedule.get("analysis_goal", "Analyze the latest data")
         target_column = schedule.get("target_column")
 
-        # Run the analysis pipeline
-        result = run_pipeline(
-            file_bytes=csv_bytes,
-            filename=f"{schedule['name']}_data.csv",
+        # Run the analysis using the analysis service
+        result = analysis_service.run_analysis(
+            df=df,
             mode=mode,
             goal=goal,
             target_column=target_column,
         )
 
         # Generate PDF from fresh analysis
+        # Convert figures to the format expected by pdf_generator
+        figures = [
+            {
+                'type': fig.type,
+                'name': fig.name,
+                'base64_png': fig.base64_png
+            }
+            for fig in result.figures
+        ] if result.figures else []
+
         metadata = {
             "goal": goal,
             "mode": mode,
@@ -331,17 +385,33 @@ class SchedulerService:
             "data_source": "Google Sheets (Live)",
             "spreadsheet_id": spreadsheet_id,
             "run_date": datetime.now().strftime("%B %d, %Y at %I:%M %p"),
+            "dataset_info": {
+                "rows": len(df),
+                "columns": len(df.columns),
+                "target": target_column,
+            }
         }
 
-        pdf_bytes = pdf_generator.generate(result, metadata)
+        pdf_bytes = pdf_generator.generate(
+            figures=figures,
+            metrics=result.metrics,
+            summary_markdown=result.summary_markdown or '',
+            plan=result.plan or {},
+            metadata=metadata
+        )
 
         # Get summary for email
-        summary = result.get("summary_markdown", "Analysis completed on fresh data.")
+        summary = result.summary_markdown or "Analysis completed on fresh data."
         if len(summary) > 500:
             summary = summary[:497] + "..."
 
         # Send email with fresh analysis
-        email_service.send_report_email(
+        if not email_service.is_configured:
+            raise Exception(
+                "Email service not configured. Set RESEND_API_KEY environment variable."
+            )
+
+        email_sent = email_service.send_report_email(
             to_email=schedule["email"],
             subject=f"Vizora Report: {schedule['name']} (Latest Data)",
             analysis_name=schedule["name"],
@@ -349,34 +419,68 @@ class SchedulerService:
             pdf_bytes=pdf_bytes,
         )
 
+        if not email_sent:
+            raise Exception(f"Failed to send email to {schedule['email']}")
+
     def _execute_with_stored_result(self, schedule: dict):
         """
         Execute scheduled report using stored job result.
         This is the original behavior for static data schedules.
+
+        NOTE: This currently requires results to be stored in the job_results table,
+        which is not automatically done by the analysis routes. Consider migrating
+        to Google Sheets-based schedules for persistent scheduled reports.
         """
         from vizora.web.services.pdf_generator import pdf_generator
 
-        # Get the original job result
-        job_result = (
-            supabase_client.table("job_results")
-            .select("*")
-            .eq("job_id", schedule["job_id"])
-            .single()
-            .execute()
-        )
+        job_id = schedule.get("job_id")
+        if not job_id:
+            raise Exception("Schedule has no associated job_id")
+
+        # Try to get the job result from the database
+        try:
+            job_result = (
+                supabase_client.table("job_results")
+                .select("*")
+                .eq("job_id", job_id)
+                .single()
+                .execute()
+            )
+        except Exception as e:
+            # Table might not exist or job not found
+            raise Exception(
+                f"Cannot find stored results for job {job_id}. "
+                "Saved Analysis schedules require persisted job results. "
+                "Consider using Google Sheets as the data source for scheduled reports."
+            )
 
         if not job_result.data:
-            raise Exception(f"No job result found for job_id {schedule['job_id']}")
+            raise Exception(
+                f"No stored results found for job {job_id}. "
+                "The original analysis results may have been lost. "
+                "Consider recreating this schedule with Google Sheets as the data source."
+            )
 
         # Generate PDF
         result_data = job_result.data.get("result", {})
+
+        # Extract figures in the expected format
+        figures = result_data.get("figures", [])
+
         metadata = {
             "goal": job_result.data.get("goal", ""),
             "mode": job_result.data.get("mode", ""),
             "user_email": schedule["email"],
+            "dataset_info": result_data.get("dataset_info", {}),
         }
 
-        pdf_bytes = pdf_generator.generate(result_data, metadata)
+        pdf_bytes = pdf_generator.generate(
+            figures=figures,
+            metrics=result_data.get("metrics"),
+            summary_markdown=result_data.get("summary_markdown", ""),
+            plan=result_data.get("plan", {}),
+            metadata=metadata
+        )
 
         # Get summary for email
         summary = result_data.get("summary_markdown", "Analysis completed.")

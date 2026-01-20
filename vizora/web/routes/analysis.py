@@ -61,16 +61,22 @@ def run_analysis_task(
     job_id: str,
     mode: str,
     goal: str,
-    target_column: Optional[str]
+    target_column: Optional[str],
+    forecast_horizon: Optional[int] = None,
+    forecast_frequency: Optional[str] = None,
+    date_column: Optional[str] = None
 ) -> None:
     """
     Background task that runs the full analysis pipeline.
 
     Args:
         job_id: Unique job identifier.
-        mode: Analysis mode (eda, predictive, hybrid).
+        mode: Analysis mode (eda, predictive, hybrid, forecast).
         goal: User's analysis goal.
         target_column: Target column name (optional).
+        forecast_horizon: Number of periods to forecast (forecast mode).
+        forecast_frequency: Forecast frequency (daily, weekly, monthly).
+        date_column: Date column name for time series.
     """
     def update_progress(step: str, percentage: int):
         job_store[job_id].progress = ProgressInfo(
@@ -97,7 +103,10 @@ def run_analysis_task(
             goal=goal,
             target_column=target_column,
             progress_callback=update_progress,
-            run_id=job_id
+            run_id=job_id,
+            forecast_horizon=forecast_horizon,
+            forecast_frequency=forecast_frequency,
+            date_column=date_column
         )
 
         # Store result
@@ -117,9 +126,12 @@ def run_analysis_task(
 async def start_analysis(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(..., description="CSV dataset file"),
-    mode: str = Form(..., description="Analysis mode: eda, predictive, or hybrid"),
+    mode: str = Form(..., description="Analysis mode: eda, predictive, hybrid, or forecast"),
     goal: str = Form(..., description="User's analysis goal"),
     target_column: Optional[str] = Form(None, description="Target column name (optional)"),
+    forecast_horizon: Optional[int] = Form(None, description="Number of periods to forecast"),
+    forecast_frequency: Optional[str] = Form(None, description="Forecast frequency: daily, weekly, monthly"),
+    date_column: Optional[str] = Form(None, description="Date column name for time series"),
     authorization: Optional[str] = Header(None, description="Bearer token")
 ) -> JobCreatedResponse:
     """
@@ -141,10 +153,10 @@ async def start_analysis(
             )
 
     # Validate mode
-    if mode not in ("eda", "predictive", "hybrid"):
+    if mode not in ("eda", "predictive", "hybrid", "forecast"):
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid mode '{mode}'. Must be eda, predictive, or hybrid."
+            detail=f"Invalid mode '{mode}'. Must be eda, predictive, hybrid, or forecast."
         )
 
     # Validate file type
@@ -187,6 +199,9 @@ async def start_analysis(
         "goal": goal,
         "mode": mode,
         "target_column": target_column,
+        "forecast_horizon": forecast_horizon,
+        "forecast_frequency": forecast_frequency,
+        "date_column": date_column,
     }
 
     # Log usage if user is authenticated
@@ -199,7 +214,10 @@ async def start_analysis(
         job_id=job_id,
         mode=mode,
         goal=goal,
-        target_column=target_column
+        target_column=target_column,
+        forecast_horizon=forecast_horizon,
+        forecast_frequency=forecast_frequency,
+        date_column=date_column
     )
 
     return JobCreatedResponse(job_id=job_id, status="queued")

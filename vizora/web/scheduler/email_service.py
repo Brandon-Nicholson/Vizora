@@ -154,7 +154,7 @@ class EmailService:
         </div>
         <p>Your scheduled analysis has completed. The full PDF report is attached to this email.</p>
         <center>
-            <a href="https://vizora.ai/results" class="cta">View in Vizora</a>
+            <a href="https://agentvizora.com/results" class="cta">View in Vizora</a>
         </center>
     </div>
     <div class="footer">

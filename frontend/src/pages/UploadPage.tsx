@@ -14,7 +14,8 @@ import './UploadPage.css'
 const modeLabels: Record<string, string> = {
   eda: 'Exploratory Analysis',
   predictive: 'Predictive Modeling',
-  hybrid: 'Full Analysis'
+  hybrid: 'Full Analysis',
+  forecast: 'Time Series Forecast'
 }
 
 export default function UploadPage() {
@@ -34,6 +35,11 @@ export default function UploadPage() {
 
   const [localGoal, setLocalGoal] = useState(state.goal)
   const [localTarget, setLocalTarget] = useState(state.targetColumn)
+
+  // Forecast-specific state
+  const [forecastHorizon, setForecastHorizon] = useState(30)
+  const [forecastFrequency, setForecastFrequency] = useState<'daily' | 'weekly' | 'monthly'>('daily')
+  const [dateColumn, setDateColumn] = useState('')
 
   // Redirect if no mode selected
   useEffect(() => {
@@ -67,11 +73,18 @@ export default function UploadPage() {
     startUpload()
 
     try {
+      const forecastOptions = state.mode === 'forecast' ? {
+        horizon: forecastHorizon,
+        frequency: forecastFrequency,
+        dateColumn: dateColumn || undefined,
+      } : undefined
+
       const response = await startAnalysis(
         state.file,
         state.mode!,
         localGoal,
-        localTarget || undefined
+        localTarget || undefined,
+        forecastOptions
       )
       jobCreated(response.job_id)
       incrementUsage() // Optimistic update
@@ -226,6 +239,77 @@ export default function UploadPage() {
               />
               <span className="input-hint">
                 The column you want to predict. We'll try to match similar column names.
+              </span>
+            </div>
+          )}
+
+          {state.mode === 'forecast' && (
+            <div className="form-section animate-slide-up forecast-config">
+              <label className="input-label">Forecast Configuration</label>
+
+              <div className="forecast-grid">
+                <div className="forecast-field">
+                  <label htmlFor="forecastTarget" className="input-label-small">
+                    Value to Forecast
+                  </label>
+                  <input
+                    id="forecastTarget"
+                    type="text"
+                    className="input"
+                    placeholder="e.g., 'sales', 'revenue', 'demand'"
+                    value={localTarget}
+                    onChange={(e) => setLocalTarget(e.target.value)}
+                  />
+                </div>
+
+                <div className="forecast-field">
+                  <label htmlFor="dateColumn" className="input-label-small">
+                    Date Column (optional)
+                  </label>
+                  <input
+                    id="dateColumn"
+                    type="text"
+                    className="input"
+                    placeholder="Auto-detected if empty"
+                    value={dateColumn}
+                    onChange={(e) => setDateColumn(e.target.value)}
+                  />
+                </div>
+
+                <div className="forecast-field">
+                  <label htmlFor="horizon" className="input-label-small">
+                    Forecast Horizon
+                  </label>
+                  <input
+                    id="horizon"
+                    type="number"
+                    className="input"
+                    min={1}
+                    max={365}
+                    value={forecastHorizon}
+                    onChange={(e) => setForecastHorizon(parseInt(e.target.value) || 30)}
+                  />
+                </div>
+
+                <div className="forecast-field">
+                  <label className="input-label-small">Frequency</label>
+                  <div className="frequency-buttons">
+                    {(['daily', 'weekly', 'monthly'] as const).map((freq) => (
+                      <button
+                        key={freq}
+                        type="button"
+                        className={`frequency-btn ${forecastFrequency === freq ? 'active' : ''}`}
+                        onClick={() => setForecastFrequency(freq)}
+                      >
+                        {freq.charAt(0).toUpperCase() + freq.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <span className="input-hint">
+                Configure how far into the future to forecast and at what frequency.
               </span>
             </div>
           )}

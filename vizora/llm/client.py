@@ -1,7 +1,14 @@
 # openai wrapper
 from openai import OpenAI
 from dotenv import load_dotenv
-from vizora.llm.prompts import EDA_PLANNER_SYSTEM_PROMPT, MODEL_PLANNER_SYSTEM_PROMPT, HYBRID_PLANNER_SYSTEM_PROMPT, SUMMARIZER_SYSTEM_PROMPT
+from vizora.llm.prompts import (
+    EDA_PLANNER_SYSTEM_PROMPT,
+    MODEL_PLANNER_SYSTEM_PROMPT,
+    HYBRID_PLANNER_SYSTEM_PROMPT,
+    FORECAST_PLANNER_SYSTEM_PROMPT,
+    SUMMARIZER_SYSTEM_PROMPT,
+    FORECAST_SUMMARIZER_SYSTEM_PROMPT,
+)
 import os
 import json
 
@@ -104,7 +111,7 @@ def get_orchestrator(mode: str = "eda") -> LLMClient:
     Get an orchestrator agent configured for the specified mode.
 
     Args:
-        mode: One of "eda", "predictive", or "hybrid"
+        mode: One of "eda", "predictive", "hybrid", or "forecast"
 
     Returns:
         Configured LLMClient instance
@@ -113,15 +120,19 @@ def get_orchestrator(mode: str = "eda") -> LLMClient:
         "eda": EDA_PLANNER_SYSTEM_PROMPT,
         "predictive": MODEL_PLANNER_SYSTEM_PROMPT,
         "hybrid": HYBRID_PLANNER_SYSTEM_PROMPT,
+        "forecast": FORECAST_PLANNER_SYSTEM_PROMPT,
     }
 
     if mode not in prompts:
         raise ValueError(f"Invalid mode '{mode}'. Must be one of: {list(prompts.keys())}")
 
+    # Forecast mode needs more tokens for time series analysis
+    max_tokens = 2500 if mode in ("hybrid", "forecast") else 2000
+
     return LLMClient(
         model=orchestrator_model,
         system_prompt=prompts[mode],
-        max_tokens=2500 if mode == "hybrid" else 2000,
+        max_tokens=max_tokens,
     )
 
 
@@ -148,44 +159,61 @@ class Summarizer:
         mode: str,
         dataset_info: dict,
         results: dict,
-        plan_notes: list = None
+        plan_notes: list = None,
+        forecast_config: dict = None,
     ) -> dict:
         """
         Generate a summary of the analysis results.
 
         Args:
             goal: User's original analysis goal
-            mode: Analysis mode (eda, predictive, hybrid)
+            mode: Analysis mode (eda, predictive, hybrid, forecast)
             dataset_info: Basic dataset info (rows, cols, target)
             results: Execution results from ctx.results
             plan_notes: Notes from the plan (optional)
+            forecast_config: Forecast configuration (for forecast mode)
 
         Returns:
             dict with "summary" (markdown string) and "error" (if any)
         """
-        # Build context for summarizer
-        context = {
-            "goal": goal,
-            "mode": mode,
-            "dataset_info": dataset_info,
-            "model_metrics": results.get("model_metrics"),
-            "feature_importance": None,
-            "describe_stats": results.get("describe"),
-            "notes": plan_notes or []
-        }
+        # Choose appropriate prompt based on mode
+        if mode == "forecast":
+            system_prompt = FORECAST_SUMMARIZER_SYSTEM_PROMPT
+            # Build forecast-specific context
+            context = {
+                "goal": goal,
+                "mode": mode,
+                "dataset_info": dataset_info,
+                "time_series_info": results.get("decomposition", {}),
+                "forecast_metrics": results.get("forecast_metrics", {}),
+                "forecast_config": forecast_config or {},
+                "notes": plan_notes or []
+            }
+        else:
+            system_prompt = SUMMARIZER_SYSTEM_PROMPT
+            # Build standard context
+            context = {
+                "goal": goal,
+                "mode": mode,
+                "dataset_info": dataset_info,
+                "model_metrics": results.get("model_metrics"),
+                "feature_importance": None,
+                "describe_stats": results.get("describe"),
+                "notes": plan_notes or []
+            }
 
-        # Extract feature importance if available, including the source model name
-        for key, value in results.items():
-            if key.startswith("feature_importance_"):
-                model_name = key.replace("feature_importance_", "")
-                context["feature_importance"] = {
-                    "model": model_name,
-                    "features": value
-                }
-                break
+            # Extract feature importance if available, including the source model name
+            for key, value in results.items():
+                if key.startswith("feature_importance_"):
+                    model_name = key.replace("feature_importance_", "")
+                    context["feature_importance"] = {
+                        "model": model_name,
+                        "features": value
+                    }
+                    break
 
         messages = [
-            {"role": "system", "content": SUMMARIZER_SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": json.dumps(context, indent=2, default=str)}
         ]
 

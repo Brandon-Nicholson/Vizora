@@ -241,15 +241,24 @@ export default function SchedulesPage() {
                   </div>
                   <div className="schedule-actions">
                     <button
-                      className="btn-action"
+                      className={`btn-action ${actionLoading === schedule.id ? 'loading' : ''}`}
                       onClick={() => handleRunNow(schedule.id)}
                       disabled={actionLoading === schedule.id}
                       title="Run now"
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-                      </svg>
-                      Run Now
+                      {actionLoading === schedule.id ? (
+                        <>
+                          <span className="btn-spinner" />
+                          Running...
+                        </>
+                      ) : (
+                        <>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                          </svg>
+                          Run Now
+                        </>
+                      )}
                     </button>
                     <button
                       className="btn-action"

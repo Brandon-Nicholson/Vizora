@@ -286,8 +286,8 @@ async def run_schedule_now(
         raise HTTPException(status_code=404, detail="Schedule not found")
 
     try:
-        # Execute the report directly
-        scheduler_service._execute_scheduled_report(schedule_id)
-        return {"status": "triggered"}
+        # Execute the report directly with raise_on_error=True to surface errors
+        scheduler_service._execute_scheduled_report(schedule_id, raise_on_error=True)
+        return {"status": "triggered", "message": "Report sent successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

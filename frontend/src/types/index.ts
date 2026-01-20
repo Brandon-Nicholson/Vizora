@@ -50,7 +50,13 @@ export interface JobCreatedResponse {
 
 // Analysis State Types
 
-export type AnalysisMode = 'eda' | 'predictive' | 'hybrid'
+export type AnalysisMode = 'eda' | 'predictive' | 'hybrid' | 'forecast'
+
+export interface ForecastConfig {
+  dateColumn?: string
+  horizon: number  // days to forecast
+  frequency: 'daily' | 'weekly' | 'monthly'
+}
 
 export interface AnalysisState {
   mode: AnalysisMode | null

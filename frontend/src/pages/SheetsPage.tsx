@@ -21,7 +21,7 @@ export default function SheetsPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { state: billingState } = useBilling()
-  const { setFile, setMode } = useAnalysis()
+  const { state: analysisState, setFile, setMode } = useAnalysis()
 
   const [isConnected, setIsConnected] = useState(false)
   const [isConfigured, setIsConfigured] = useState(true)
@@ -171,7 +171,7 @@ export default function SheetsPage() {
 
       // Set file in analysis context and navigate
       setFile(file)
-      setMode('hybrid')
+      setMode(analysisState.mode ?? 'hybrid')
       navigate('/upload')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to import sheet')

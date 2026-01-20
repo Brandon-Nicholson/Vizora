@@ -51,6 +51,20 @@ const modeOptions: ModeOption[] = [
       </svg>
     ),
     features: ['Everything in EDA', 'Plus predictive models', 'AI-generated insights']
+  },
+  {
+    id: 'forecast',
+    title: 'Time Series Forecast',
+    description: 'Predict future values using time series analysis and forecasting models.',
+    icon: (
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M3 3v18h18" />
+        <path d="M7 14l3-3 3 2 4-4" />
+        <path d="M17 9l4 0" strokeDasharray="2 2" />
+        <path d="M21 9l0 4" strokeDasharray="2 2" />
+      </svg>
+    ),
+    features: ['Seasonal decomposition', 'Prophet & exponential smoothing', 'Confidence intervals']
   }
 ]
 
