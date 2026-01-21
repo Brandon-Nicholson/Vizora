@@ -68,8 +68,13 @@ origins = [
 ]
 
 # Add production origins from environment
+# FRONTEND_URL can be a single URL or comma-separated list
 if os.getenv("FRONTEND_URL"):
-    origins.append(os.getenv("FRONTEND_URL"))
+    frontend_urls = os.getenv("FRONTEND_URL").split(",")
+    for url in frontend_urls:
+        url = url.strip()
+        if url:
+            origins.append(url)
 
 app.add_middleware(
     CORSMiddleware,
