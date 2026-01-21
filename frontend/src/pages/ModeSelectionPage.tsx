@@ -10,6 +10,7 @@ interface ModeOption {
   description: string
   icon: JSX.Element
   features: string[]
+  recommended: boolean
 }
 
 const modeOptions: ModeOption[] = [
@@ -23,7 +24,8 @@ const modeOptions: ModeOption[] = [
         <path d="M7 16l4-8 4 5 5-10" />
       </svg>
     ),
-    features: ['Distributions & histograms', 'Correlation analysis', 'Missing data detection']
+    features: ['Distributions & histograms', 'Correlation analysis', 'Missing data detection'],
+    recommended: false
   },
   {
     id: 'predictive',
@@ -37,7 +39,8 @@ const modeOptions: ModeOption[] = [
         <circle cx="12" cy="12" r="2" />
       </svg>
     ),
-    features: ['Model training & comparison', 'Performance metrics', 'Feature importance']
+    features: ['Model training & comparison', 'Performance metrics', 'Feature importance'],
+    recommended: false
   },
   {
     id: 'hybrid',
@@ -50,7 +53,8 @@ const modeOptions: ModeOption[] = [
         <path d="M2 12l10 5 10-5" />
       </svg>
     ),
-    features: ['Everything in EDA', 'Plus predictive models', 'AI-generated insights']
+    features: ['Everything in EDA', 'Plus predictive models', 'AI-generated insights'],
+    recommended: true
   },
   {
     id: 'forecast',
@@ -64,7 +68,8 @@ const modeOptions: ModeOption[] = [
         <path d="M21 9l0 4" strokeDasharray="2 2" />
       </svg>
     ),
-    features: ['Seasonal decomposition', 'Prophet & exponential smoothing', 'Confidence intervals']
+    features: ['Seasonal decomposition', 'Prophet & exponential smoothing', 'Confidence intervals'],
+    recommended: false
   }
 ]
 
@@ -99,7 +104,7 @@ export default function ModeSelectionPage() {
           {modeOptions.map((option, index) => (
             <div
               key={option.id}
-              className="mode-card card card-clickable animate-slide-up"
+              className={`mode-card card card-clickable animate-slide-up${option.recommended ? ' mode-card-recommended' : ''}`}
               style={{ animationDelay: `${index * 0.1}s` }}
               onClick={() => handleSelectMode(option.id)}
             >
