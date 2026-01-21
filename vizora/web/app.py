@@ -12,10 +12,11 @@ import os
 from pathlib import Path
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from vizora.web.routes import health_router, analysis_router, auth_router, billing_router, schedules_router, google_router
 from vizora.web.services.file_manager import file_manager
@@ -70,16 +71,43 @@ origins = [
 # Add production origins from environment
 # FRONTEND_URL can be a single URL or comma-separated list
 frontend_url_env = os.getenv("FRONTEND_URL", "")
-print(f"[CORS] FRONTEND_URL env: {frontend_url_env}")
+print(f"[CORS] FRONTEND_URL env: '{frontend_url_env}'")
 if frontend_url_env:
     frontend_urls = frontend_url_env.split(",")
     for url in frontend_urls:
         url = url.strip()
         if url:
             origins.append(url)
+            print(f"[CORS] Added origin: '{url}'")
 
-print(f"[CORS] Configured origins: {origins}")
+print(f"[CORS] Final configured origins: {origins}")
 
+
+# Custom CORS middleware to handle preflight requests before route validation
+class CORSPreflight(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # Handle preflight OPTIONS requests
+        if request.method == "OPTIONS":
+            origin = request.headers.get("origin", "")
+            print(f"[CORS] Preflight request from origin: {origin}")
+
+            # Check if origin is allowed
+            if origin in origins or "*" in origins:
+                response = Response(status_code=200)
+                response.headers["Access-Control-Allow-Origin"] = origin
+                response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+                response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, Accept, Origin, X-Requested-With"
+                response.headers["Access-Control-Allow-Credentials"] = "true"
+                response.headers["Access-Control-Max-Age"] = "86400"
+                return response
+
+        return await call_next(request)
+
+
+# Add custom preflight middleware first (runs before CORS middleware)
+app.add_middleware(CORSPreflight)
+
+# Add standard CORS middleware for non-preflight requests
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
