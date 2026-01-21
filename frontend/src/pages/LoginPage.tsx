@@ -1,12 +1,20 @@
 import { useState, FormEvent } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import NanobotBackground from '../components/common/NanobotBackground'
 import './AuthPages.css'
 
+interface LocationState {
+  from?: { pathname: string }
+}
+
 export default function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { signIn, state } = useAuth()
+
+  // Get the redirect path from location state, or default to /mode
+  const from = (location.state as LocationState)?.from?.pathname || '/mode'
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -24,7 +32,7 @@ export default function LoginPage() {
       setError(error.message)
       setIsLoading(false)
     } else {
-      navigate('/mode')
+      navigate(from, { replace: true })
     }
   }
 
