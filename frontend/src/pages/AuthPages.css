@@ -34,7 +34,7 @@
 }
 
 .auth-logo .logo-v {
-  background: var(--color-accent-gradient);
+  background: linear-gradient(180deg, #00d4ff 0%, #7b2ff7 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
