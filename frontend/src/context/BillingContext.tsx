@@ -85,6 +85,7 @@ export function BillingProvider({ children }: { children: ReactNode }) {
 
     try {
       const profile = await getUserProfile()
+      console.log('[BillingContext] Fetched profile:', profile)
       dispatch({
         type: 'SET_BILLING',
         payload: {
@@ -96,13 +97,10 @@ export function BillingProvider({ children }: { children: ReactNode }) {
       return profile
     } catch (error) {
       // If billing info fails to load, use defaults
+      console.error('[BillingContext] Failed to fetch billing info:', error)
       dispatch({
-        type: 'SET_BILLING',
-        payload: {
-          tier: 'free',
-          monthlyUsage: 0,
-          monthlyLimit: 5,
-        },
+        type: 'SET_ERROR',
+        payload: error instanceof Error ? error.message : 'Failed to load billing info',
       })
       return null
     }
