@@ -69,12 +69,16 @@ origins = [
 
 # Add production origins from environment
 # FRONTEND_URL can be a single URL or comma-separated list
-if os.getenv("FRONTEND_URL"):
-    frontend_urls = os.getenv("FRONTEND_URL").split(",")
+frontend_url_env = os.getenv("FRONTEND_URL", "")
+print(f"[CORS] FRONTEND_URL env: {frontend_url_env}")
+if frontend_url_env:
+    frontend_urls = frontend_url_env.split(",")
     for url in frontend_urls:
         url = url.strip()
         if url:
             origins.append(url)
+
+print(f"[CORS] Configured origins: {origins}")
 
 app.add_middleware(
     CORSMiddleware,
