@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { createCheckoutSession } from '../api/client'
 import NanobotBackground from '../components/common/NanobotBackground'
+import SiteFooter from '../components/common/SiteFooter'
 import './PricingPage.css'
 
 interface PricingTier {
@@ -176,6 +177,8 @@ export default function PricingPage() {
           </div>
         </div>
       </div>
+
+      <SiteFooter />
     </div>
   )
 }

@@ -3,6 +3,7 @@ import NanobotBackground from '../components/common/NanobotBackground'
 import { useAuth } from '../context/AuthContext'
 import { useBilling } from '../context/BillingContext'
 import ModelsList from '../components/models/ModelsList'
+import SiteFooter from '../components/common/SiteFooter'
 import './HomePage.css'
 
 export default function HomePage() {
@@ -144,9 +145,7 @@ export default function HomePage() {
         </aside>
       </div>
 
-      <footer className="home-footer">
-        <p>Powered by advanced AI orchestration</p>
-      </footer>
+      <SiteFooter className="home-footer" />
     </div>
   )
 }

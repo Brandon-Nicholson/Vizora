@@ -10,6 +10,10 @@ import ResultsPage from './pages/ResultsPage'
 import LoginPage from './pages/LoginPage'
 import SignupPage from './pages/SignupPage'
 import PricingPage from './pages/PricingPage'
+import PrivacyPage from './pages/PrivacyPage'
+import TermsPage from './pages/TermsPage'
+import RefundsPage from './pages/RefundsPage'
+import ContactPage from './pages/ContactPage'
 import SchedulesPage from './pages/SchedulesPage'
 import SheetsPage from './pages/SheetsPage'
 
@@ -25,6 +29,10 @@ function App() {
               <Route path="/login" element={<LoginPage />} />
               <Route path="/signup" element={<SignupPage />} />
               <Route path="/pricing" element={<PricingPage />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
+              <Route path="/terms" element={<TermsPage />} />
+              <Route path="/refunds" element={<RefundsPage />} />
+              <Route path="/contact" element={<ContactPage />} />
 
               {/* Protected routes */}
               <Route
