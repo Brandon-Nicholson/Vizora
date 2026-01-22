@@ -93,6 +93,14 @@ export default function PricingPage() {
       <NanobotBackground particleCount={80} connectionDistance={130} />
 
       <div className="pricing-content animate-fade-in">
+        <button className="back-btn" onClick={() => navigate('/')}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M19 12H5" />
+            <path d="m12 19-7-7 7-7" />
+          </svg>
+          Home
+        </button>
+
         <div className="pricing-header">
           <h1>Simple, Transparent Pricing</h1>
           <p>Start free, upgrade when you need more</p>
