@@ -1,13 +1,24 @@
+import { useNavigate } from 'react-router-dom'
 import NanobotBackground from '../components/common/NanobotBackground'
 import SiteFooter from '../components/common/SiteFooter'
 import './LegalPage.css'
 
 export default function PrivacyPage() {
+  const navigate = useNavigate()
+
   return (
     <div className="legal-page">
       <NanobotBackground particleCount={70} connectionDistance={120} />
 
       <div className="legal-content">
+        <button className="back-btn" onClick={() => navigate('/')}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M19 12H5" />
+            <path d="m12 19-7-7 7-7" />
+          </svg>
+          Home
+        </button>
+
         <header className="legal-header">
           <h1>Privacy Policy</h1>
           <p>We respect your data and only use it to operate and improve Vizora.</p>
