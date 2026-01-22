@@ -11,6 +11,18 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from vizora.web.auth.dependencies import get_current_user
+
+
+def get_frontend_url() -> str:
+    """Get the primary frontend URL from FRONTEND_URL env var.
+
+    Handles comma-separated list of URLs by returning only the first one.
+    """
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    # Handle comma-separated URLs - use the first one
+    if "," in frontend_url:
+        frontend_url = frontend_url.split(",")[0].strip()
+    return frontend_url
 from vizora.web.auth.schemas import UserResponse
 from vizora.web.billing.stripe_client import stripe_client
 from vizora.web.billing.service import billing_service
@@ -69,7 +81,7 @@ async def create_checkout(
         )
 
     # Get frontend URL for redirects
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    frontend_url = get_frontend_url()
 
     # Check if user already has an active subscription
     subscription = billing_service.get_subscription_details(current_user.id)
@@ -162,7 +174,7 @@ async def create_portal_session(
             detail="No billing account found. Please subscribe first."
         )
 
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    frontend_url = get_frontend_url()
 
     try:
         session = stripe_client.create_customer_portal_session(

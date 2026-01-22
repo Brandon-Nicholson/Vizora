@@ -18,6 +18,18 @@ from vizora.web.google.oauth import google_oauth
 from vizora.web.google.sheets import sheets_service
 
 
+def get_frontend_url() -> str:
+    """Get the primary frontend URL from FRONTEND_URL env var.
+
+    Handles comma-separated list of URLs by returning only the first one.
+    """
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    # Handle comma-separated URLs - use the first one
+    if "," in frontend_url:
+        frontend_url = frontend_url.split(",")[0].strip()
+    return frontend_url
+
+
 router = APIRouter(prefix="/api/google", tags=["google"])
 
 
@@ -114,7 +126,7 @@ async def oauth_callback(
 
     Redirects to frontend with success or error status.
     """
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    frontend_url = get_frontend_url()
 
     if error:
         return RedirectResponse(f"{frontend_url}/sheets?error={error}")
