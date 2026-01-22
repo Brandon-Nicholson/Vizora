@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAnalysis } from '../context/AnalysisContext'
 import NanobotBackground from '../components/common/NanobotBackground'
 import type { AnalysisMode } from '../types'
@@ -75,11 +75,18 @@ const modeOptions: ModeOption[] = [
 
 export default function ModeSelectionPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { setMode } = useAnalysis()
 
   const handleSelectMode = (mode: AnalysisMode) => {
     setMode(mode)
-    navigate('/upload')
+    // Navigate to the next page based on query parameter
+    const next = searchParams.get('next')
+    if (next === 'sheets') {
+      navigate('/sheets')
+    } else {
+      navigate('/upload')
+    }
   }
 
   return (

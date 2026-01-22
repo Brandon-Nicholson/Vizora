@@ -119,7 +119,7 @@ export default function HomePage() {
                   <p>Pull data directly from Sheets without CSV downloads.</p>
                   <button
                     className="btn btn-secondary"
-                    onClick={() => (isPro ? navigate('/sheets') : navigate('/pricing'))}
+                    onClick={() => (isPro ? navigate('/mode?next=sheets') : navigate('/pricing'))}
                   >
                     {isPro ? 'Try it' : 'Upgrade to Pro'}
                   </button>
