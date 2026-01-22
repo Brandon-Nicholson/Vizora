@@ -196,18 +196,10 @@
 }
 
 .home-pricing-btn,
-.home-status-btn {
+.home-auth-btn {
   padding: var(--spacing-sm) var(--spacing-lg);
   font-size: var(--font-size-sm);
   backdrop-filter: blur(6px);
-}
-
-.home-status-btn {
-  pointer-events: none;
-}
-
-.home-status-btn:disabled {
-  opacity: 1;
 }
 
 .feature {

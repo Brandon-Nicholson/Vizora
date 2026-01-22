@@ -8,7 +8,7 @@ import './HomePage.css'
 
 export default function HomePage() {
   const navigate = useNavigate()
-  const { state: authState } = useAuth()
+  const { state: authState, signOut } = useAuth()
   const { state: billingState } = useBilling()
 
   const isPro = billingState.tier === 'pro' || billingState.monthlyLimit === -1
@@ -26,14 +26,23 @@ export default function HomePage() {
           >
             Pricing
           </button>
-          <button
-            className="btn btn-secondary home-status-btn"
-            type="button"
-            aria-disabled="true"
-            disabled
-          >
-            {isSignedIn ? 'Signed In' : 'Signed Out'}
-          </button>
+          {isSignedIn ? (
+            <button
+              className="btn btn-secondary home-auth-btn"
+              type="button"
+              onClick={() => signOut()}
+            >
+              Sign Out
+            </button>
+          ) : (
+            <button
+              className="btn btn-secondary home-auth-btn"
+              type="button"
+              onClick={() => navigate('/login')}
+            >
+              Sign In
+            </button>
+          )}
         </div>
 
         <div className="home-layout">
