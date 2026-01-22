@@ -257,6 +257,13 @@
 .home-footer .site-footer-inner {
   justify-content: center;
   text-align: center;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.home-footer .site-footer-brand {
+  align-items: center;
 }
 
 /* Responsive */
