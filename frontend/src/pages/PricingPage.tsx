@@ -101,6 +101,11 @@ export default function PricingPage() {
           Home
         </button>
 
+        <div className="demo-banner">
+          <span className="demo-pill">Demo mode</span>
+          <span className="demo-text">Test payments only. No real charges.</span>
+        </div>
+
         <div className="pricing-header">
           <h1>Simple, Transparent Pricing</h1>
           <p>Start free, upgrade when you need more</p>
