@@ -122,11 +122,20 @@ export default function CreateScheduleModal({ onClose, onCreated }: Props) {
     setError(null)
 
     try {
+      // Convert local hour to UTC
+      // Get the timezone offset in hours (negative for west of UTC)
+      const timezoneOffsetHours = new Date().getTimezoneOffset() / 60
+      // Convert local hour to UTC (add offset because getTimezoneOffset returns minutes behind UTC as positive)
+      let utcHour = hour + timezoneOffsetHours
+      // Handle wrap-around
+      if (utcHour < 0) utcHour += 24
+      if (utcHour >= 24) utcHour -= 24
+
       const data: CreateScheduleRequest = {
         name: name.trim(),
         frequency,
         email: email.trim(),
-        hour,
+        hour: Math.round(utcHour),
       }
 
       if (frequency === 'weekly') {

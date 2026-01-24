@@ -110,8 +110,17 @@ export default function SchedulesPage() {
   }
 
   const formatFrequency = (schedule: Schedule) => {
-    const hour = schedule.hour
-    const hourStr = `${hour > 12 ? hour - 12 : hour || 12}:00 ${hour >= 12 ? 'PM' : 'AM'}`
+    // Convert UTC hour to local time for display
+    const utcHour = schedule.hour
+    const timezoneOffsetHours = new Date().getTimezoneOffset() / 60
+    // Subtract offset to convert UTC to local (opposite of what we do when sending)
+    let localHour = utcHour - timezoneOffsetHours
+    // Handle wrap-around
+    if (localHour < 0) localHour += 24
+    if (localHour >= 24) localHour -= 24
+    localHour = Math.round(localHour)
+
+    const hourStr = `${localHour > 12 ? localHour - 12 : localHour || 12}:00 ${localHour >= 12 ? 'PM' : 'AM'}`
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
     switch (schedule.frequency) {
