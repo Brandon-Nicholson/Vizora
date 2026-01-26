@@ -260,6 +260,13 @@
 
 /* Responsive */
 @media (max-width: 768px) {
+  .home-page {
+    justify-content: flex-start;
+    padding-top: calc(var(--spacing-xl) + 60px);
+    padding-bottom: var(--spacing-3xl);
+    min-height: auto;
+  }
+
   .logo-text {
     font-size: 3.5rem;
   }
@@ -282,5 +289,20 @@
     position: static;
     width: 100%;
     margin-top: var(--spacing-xl);
+    margin-bottom: var(--spacing-3xl);
+  }
+
+  .home-footer {
+    position: static;
+    transform: none;
+    width: 100%;
+    margin-top: var(--spacing-xl);
+  }
+
+  .home-top-actions {
+    position: fixed;
+    top: var(--spacing-md);
+    right: var(--spacing-md);
+    z-index: 10;
   }
 }
