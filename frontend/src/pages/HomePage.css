@@ -272,8 +272,23 @@
   }
 
   .features {
-    flex-direction: column;
-    gap: var(--spacing-lg);
+    flex-direction: row;
+    gap: var(--spacing-md);
+    flex-wrap: nowrap;
+  }
+
+  .feature-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .feature-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .feature span {
+    font-size: var(--font-size-xs);
   }
 
   .tagline {
