@@ -273,8 +273,15 @@
 
   .features {
     flex-direction: row;
-    gap: var(--spacing-md);
+    gap: var(--spacing-lg);
     flex-wrap: nowrap;
+    justify-content: space-evenly;
+    width: 100%;
+  }
+
+  .feature {
+    flex: 1;
+    max-width: 100px;
   }
 
   .feature-icon {
@@ -289,6 +296,7 @@
 
   .feature span {
     font-size: var(--font-size-xs);
+    text-align: center;
   }
 
   .tagline {
